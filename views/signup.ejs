@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up</title>
+    <link rel="stylesheet" href="/css/style.css"> 
+</head>
+<body>
+    <div class="auth-container">
+        <h2>Sign Up</h2>
+        <%if(error){%>
+            <p class="error-message"><%=error%></p>
+        <%}%>
+        <form action="/signup" method="POST" onsubmit="return validatePassword()">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" required>
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" required>
+            <label for="confirm-password">Confirm Password:</label>
+            <input type="password" id="confirm-password" name="confirmPassword" required>
+            <button type="submit">Sign Up</button>
+        </form>
+        <p>Already have an account? <a href="/login">Login</a></p>
+    </div>
+
+    <script>
+        function validatePassword(){
+            const password=document.getElementById('password').value;
+            const confirmPassword=document.getElementById('confirm-password').value;
+
+            if(password!==confirmPassword){
+                alert('Passwords do not match!');
+                return false;
+            }
+            return true;
+        }
+    </script>
+</body>
+</html>

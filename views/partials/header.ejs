@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Header</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <header class="header">
+        <div class="logo">
+            <a href="/" class="logo-text">ReadNest</a>
+        </div>
+        <nav class="nav-menu">
+            <a href="/">Home</a>
+            <a href="#" onclick="toggleCategoriesDropdown(); return false;">Categories <i class="fa-solid fa-caret-down"></i></a>
+            <div class="dropdown-content">
+                <a href="/category/fiction">Fiction</a>
+                <a href="/category/non-fiction">Non-Fiction</a>
+                <a href="/category/mystery-thriller">Mystery/Thriller</a>
+                <a href="/category/science-fiction">Science Fiction</a>
+                <a href="/category/fantasy">Fantasy</a>
+                <a href="/category/romance">Romance</a>
+                <a href="/category/horror">Horror</a>
+                <a href="/category/historical">Historical</a>
+                <a href="/category/young-adult">Young Adult (YA)</a>
+                <a href="/category/biography">Biography</a>
+                <a href="/category/self-help">Self-Help</a>
+                <a href="/category/poetry">Poetry</a>
+                <a href="/category/childrens-books">Children’s Books</a>
+                <a href="/category/graphic-novels">Graphic Novels</a>
+            </div>
+            <a href="/top_reviews">Top Reviews</a>
+            <a href="/add">Write a Review</a>
+            <a href="/about">About Me</a>
+            <a href="/contact">Contact Me</a>
+        </nav>
+        <div class="search-bar">
+            <form action="/" method="GET">
+                <input 
+                    type="text" 
+                    name="search" 
+                    placeholder="Search books" 
+                    aria-label="Search books" 
+                    value="<%=typeof searchQuery!=='undefined'?searchQuery:''%>"
+                >
+                <button type="submit" aria-label="Search">
+                    <i class="fa-brands fa-searchengin"></i>
+                </button>
+            </form>
+        </div>
+        <div class="user-auth">
+            <div class="profile-picture-header">
+                <a href="/profile/<%= typeof user!=='undefined'?user.id:''%>">
+                    <img 
+                        src="<%=typeof user!=='undefined' && user.profile_picture?user.profile_picture:`https://ui-avatars.com/api/?name=${user.username.replace(' ', '+')}` %>" 
+                        alt="Profile Picture" 
+                        class="profile-pic"
+                    >
+                </a>
+            </div>
+            <%if(typeof user!=='undefined' && user){%>
+                <div class="user-dropdown" onclick="toggleProfileDropdown(event)">
+                    <span><%= user.username %> <i class="fa-solid fa-caret-down"></i></span>
+                    <div class="dropdown-content" id="profileDropdown">
+                        <a href="/profile/<%= user.id %>">Profile</a>
+                        <a href="/logout">Logout</a>
+                    </div>
+                </div>
+            <%}else{%>
+                <a href="/login">Login</a> / <a href="/register">Register</a>
+            <%}%>
+        </div>
+    </header>
+    <script>
+        function toggleCategoriesDropdown(){
+            const dropdown=document.querySelector('.nav-menu .dropdown-content');
+            dropdown.style.display=dropdown.style.display==='block'?'none':'block';
+        }
+        document.addEventListener('click',function(event){
+            const dropdown=document.querySelector('.nav-menu .dropdown-content');
+            const categoriesLink=document.querySelector('.nav-menu a[href="#"]');
+            if(!categoriesLink.contains(event.target)){
+                dropdown.style.display = 'none';
+            }
+        });
+        function toggleProfileDropdown(event){
+            event.stopPropagation();
+            const dropdown = document.getElementById('profileDropdown');
+            dropdown.classList.toggle('show');
+        }
+        document.addEventListener('click', function(event){
+            const dropdown = document.getElementById('profileDropdown');
+            const profileLink = document.querySelector('.user-dropdown');
+            if(!profileLink.contains(event.target)){
+                dropdown.classList.remove('show');
+            }
+        });
+    </script>
+</body>
+</html>

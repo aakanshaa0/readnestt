@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= book.title %> Reviews</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <%-include('partials/header')%>
+    <div class="container">
+        <h1><%=book.title%> Reviews</h1>
+        <div class="reviews-list">
+            <%if(reviews.length===0){%>
+                <p class="empty-state">No reviews yet. Be the first to <a href="/add">add one</a>!</p>
+            <%}else{%>
+                <%reviews.forEach(review=>{%>
+                    <div class="review-card">
+                        <div class="user-profile">
+                            <a href="/profile/<%=review.user_id%>">
+                                <img 
+                                    src="<%=review.profile_picture || `https://ui-avatars.com/api/?name=${review.username.replace(' ', '+')}`%>" 
+                                    alt="<%=review.username%>'s Profile Picture"
+                                    class="profile-pic"
+                                >
+                            </a>
+                            <div class="user-details">
+                                <p><strong><%= review.username%></strong></p>
+                                <%if(review.bio){%>
+                                    <p><strong>Bio:</strong><%= review.bio%></p>
+                                <%}%>
+                            </div>
+                        </div>
+                        <p><strong>Author:</strong><%= review.author%></p>
+                        <p><strong>Rating:</strong> 
+                            <%for(let i=1;i<=5;i++){%>
+                                <%if(i<=review.rating){%>
+                                    <i class="fas fa-star"></i>
+                                <%}else{%>
+                                    <i class="far fa-star"></i>
+                                <%}%>
+                            <%}%>
+                            (<%= review.rating%>/5)
+                        </p>
+                        <p><strong>ISBN:</strong> <%= review.isbn %></p>
+                        <p><strong>Date Read:</strong> <%= new Date(review.date_read).toLocaleDateString()%></p>
+                        <a href="/reviews/<%= review.id%>" class="btnn">View Full Review</a>
+                    </div>
+                <%})%>
+            <%}%>
+        </div>
+    </div>
+    <%-include('partials/footer')%>
+</body>
+</html>

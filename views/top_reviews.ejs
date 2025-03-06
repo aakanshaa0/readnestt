@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Top Reviews</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <%-include('partials/header')%>
+    <div class="container">
+        <h1>Top Reviews (5-Star Books)</h1>
+        <div class="sort-options">
+            <a href="/top_reviews?sort=rating">Sort by Rating</a>
+            <a href="/top_reviews?sort=date_read">Sort by Date Read</a>
+        </div>
+        <div class="book-list">
+            <%if(books.length===0){%>
+                <p class="empty-state">No 5-star books found. <a href="/add">Add a review</a>!</p>
+            <%}else{%>
+                <%books.forEach(book=>{%>
+                    <div class="book">
+                        <img src="https://covers.openlibrary.org/b/isbn/<%= book.isbn || 'NONE' %>-L.jpg" 
+                             onerror="this.src='/img/placeholder.jpg';"
+                             alt="Cover of <%= book.title %>"
+                             class="book-cover">
+                        <h2><%= book.title %></h2>
+                        <p><strong>Author:</strong> <%= book.author || "Unknown" %></p>
+                        <p><strong>Average Rating:</strong> 
+                            <%if(typeof book.avg_rating==='number'){%>
+                                <%for(let i=1; i<=5; i++){%>
+                                    <%if(i<=book.avg_rating){%>
+                                        <i class="fas fa-star"></i>
+                                    <%}else{%>
+                                        <i class="far fa-star"></i>
+                                    <%}%>
+                                <%}%>
+                                (<%=book.avg_rating.toFixed(2)%>/5)
+                            <%}else{%>
+                                N/A
+                            <%}%>
+                        </p>
+                        <p><strong>Reviewed by:</strong> <%=book.username%></p>
+                        <a href="/books/<%= book.id %>" class="btnn">View Reviews</a>
+                    </div>
+                <%})%>
+            <%}%>
+        </div>
+    </div>
+    <%-include('partials/footer')%>
+</body>
+</html>
