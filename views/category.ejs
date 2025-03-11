@@ -8,38 +8,38 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 <body>
-    <%-include('partials/header')%>
+    <%- include('partials/header') %>
     <div class="container">
-        <h1><%=category%> Books</h1>
+        <h1><%= category %> Books</h1>
         <p class="category-description"><%= description %></p>
         <div class="book-list">
-            <%if(books.length===0){%>
+            <% if (books.length === 0) { %>
                 <p class="empty-state">No books found in this category. <a href="/add" class="btnn">Add one</a></p>
-            <%}else{%>
-                <%books.forEach(book=>{%>
+            <% } else { %>
+                <% books.forEach(book => { %>
                     <div class="book">
                         <img src="https://covers.openlibrary.org/b/isbn/<%= book.isbn || 'NONE' %>-L.jpg" 
                              onerror="this.src='/img/placeholder.jpg';"
-                             alt="Cover of <%=book.title%>"
+                             alt="Cover of <%= book.title %>"
                              class="book-cover">
                         <h2><%= book.title %></h2>
-                        <p><strong>Author:</strong> <%=book.author || "Unknown"%></p>
+                        <p><strong>Author:</strong> <%= book.author || "Unknown" %></p>
                         <p><strong>Rating:</strong> 
-                            <% for(let i=1;i<=5;i++){%>
-                                <%if(i<=book.rating){%>
+                            <% for (let i = 1; i <= 5; i++) { %>
+                                <% if (i <= book.rating) { %>
                                     <i class="fas fa-star"></i>
-                                <%}else{%>
+                                <% } else { %>
                                     <i class="far fa-star"></i>
-                                <%}%>
-                            <%}%>
+                                <% } %>
+                            <% } %>
                             (<%= book.rating %>/5)
                         </p>
-                        <a href="/books/<%= book.id %>" class="btnn">View Reviews</a>
+                        <a href="/books/<%= book.isbn %>" class="btnn">View Reviews</a>
                     </div>
-                <%})%>
-            <%}%>
+                <% }) %>
+            <% } %>
         </div>
     </div>
-    <%-include('partials/footer')%>
+    <%- include('partials/footer') %>
 </body>
 </html>

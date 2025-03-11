@@ -3,60 +3,90 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edit Book</title>
+    <title>Edit Book - Book Review</title>
     <link rel="stylesheet" href="/css/style.css">
+    <%-include('partials/header')%>
 </head>
 <body>
-    <%-include('partials/header')%>
-    <h1>Edit Book</h1>
-    <form action="/books/edit/<%=book.id%>" method="POST">
-        <div class="form-group">
-            <label for="isbn">ISBN</label>
-            <input type="text" id="isbn" name="isbn" required>        
-            <label for="title">Title:</label>
-            <input 
-                type="text" 
-                id="title" 
-                name="title" 
-                value="<%= book.title %>"
-                required
-            >
-        </div>
-        <div class="form-group">
-            <label for="author">Author:</label>
-            <input 
-                type="text" 
-                id="author" 
-                name="author" 
-                value="<%= book.author %>"
-                required
-            >
-        </div>
-        <div class="form-group">
-            <label for="rating">Rating:</label>
-            <input 
-                type="number" 
-                id="rating" 
-                name="rating" 
-                value="<%=book.rating%>"
-                min="1" 
-                max="5" 
-                required
-            >
-        </div>
-        <div class="form-group">
-            <label for="notes">Notes:</label>
-            <textarea 
-                id="notes" 
-                name="notes" 
-                rows="4"
-            ><%=book.notes%></textarea>
-        </div>
-        <div class="form-actions">
-            <button type="submit" class="btn-save">Save Changes</button>
-            <a href="/profile" class="btn-cancel">Cancel</a>
-        </div>
-    </form>
+    <div class="container">
+        <h1>Edit Book Review</h1>
+        <%if(typeof errors!=='undefined' && errors.length>0){%>
+            <div class="error-message">
+                <%errors.forEach(error=>{%>
+                    <p><%=error.msg%></p>
+                <%})%>
+            </div>
+        <%}%>
+        <form action="/edit/<%= book.id %>" method="POST" class="book-form">
+            <div class="form-group">
+                <label for="title">Book Title:</label>
+                <input type="text" id="title" name="title" 
+                       value="<%= book.title %>" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="author">Author:</label>
+                <input type="text" id="author" name="author" 
+                       value="<%= book.author %>">
+            </div>
+
+            <div class="form-group">
+                <label for="category">Category:</label>
+                <select id="category" name="category" required>
+                    <option value="" disabled>Select a category</option>
+                    <option value="Fiction" <%= book.category === 'Fiction' ? 'selected' : '' %>>Fiction</option>
+                    <option value="Non-Fiction" <%= book.category === 'Non-Fiction' ? 'selected' : '' %>>Non-Fiction</option>
+                    <option value="Mystery/Thriller" <%= book.category === 'Mystery/Thriller' ? 'selected' : '' %>>Mystery/Thriller</option>
+                    <option value="Science Fiction" <%= book.category === 'Science Fiction' ? 'selected' : '' %>>Science Fiction</option>
+                    <option value="Fantasy" <%= book.category === 'Fantasy' ? 'selected' : '' %>>Fantasy</option>
+                    <option value="Romance" <%= book.category === 'Romance' ? 'selected' : '' %>>Romance</option>
+                    <option value="Horror" <%= book.category === 'Horror' ? 'selected' : '' %>>Horror</option>
+                    <option value="Historical" <%= book.category === 'Historical' ? 'selected' : '' %>>Historical</option>
+                    <option value="Young Adult (YA)" <%= book.category === 'Young Adult (YA)' ? 'selected' : '' %>>Young Adult (YA)</option>
+                    <option value="Biography" <%= book.category === 'Biography' ? 'selected' : '' %>>Biography</option>
+                    <option value="Self-Help" <%= book.category === 'Self-Help' ? 'selected' : '' %>>Self-Help</option>
+                    <option value="Poetry" <%= book.category === 'Poetry' ? 'selected' : '' %>>Poetry</option>
+                    <option value="Children’s Books" <%= book.category === 'Children’s Books' ? 'selected' : '' %>>Children’s Books</option>
+                    <option value="Graphic Novels" <%= book.category === 'Graphic Novels' ? 'selected' : '' %>>Graphic Novels</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="rating">Rating:</label>
+                <select id="rating" name="rating" required>
+                    <option value="" disabled>Select a rating</option>
+                    <% for(let i=1; i<=5; i++) { %>
+                        <option value="<%= i %>" 
+                            <%= book.rating == i ? 'selected' : '' %>>
+                            <%= i %> Star<% if(i>1) { %>s<% } %>
+                        </option>
+                    <% } %>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="isbn">ISBN:</label>
+                <input type="text" id="isbn" name="isbn" 
+                       value="<%= book.isbn %>" required>
+            </div>
+
+            <div class="form-group">
+                <label for="notes">Review Notes:</label>
+                <textarea id="notes" name="notes" rows="5"><%= book.notes %></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="date_read">Date Read:</label>
+                <input type="date" id="date_read" name="date_read"
+                       value="<%= book.date_read.toISOString().split('T')[0] %>">
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Update Review</button>
+                <a href="/" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
     <%-include('partials/footer')%>
 </body>
 </html>

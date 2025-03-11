@@ -109,6 +109,10 @@ body {
     min-width: 160px;
 }
 
+.user-dropdown .dropdown-content.show{
+    display: block;
+}
+
 .dropdown-content a {
     color: var(--text-color);
     text-decoration: none;
@@ -719,7 +723,25 @@ body {
 
 .book-actions {
     margin-top: 10px;
-    text-align: center;
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+}
+
+.action-icon {
+    color: var(--text-color);
+    transition: color 0.3s ease;
+}
+
+.action-icon:hover {
+    color: var(--accent-color);
+}
+
+.icon-button {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
 }
 
 .book-actions a,

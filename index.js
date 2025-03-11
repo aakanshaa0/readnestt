@@ -4,6 +4,7 @@ const session = require('express-session');
 const bcrypt = require('bcrypt');
 const { Pool } = require('pg');
 const app = express();
+const axios = require('axios');
 
 // Middleware
 app.set('view engine', 'ejs');
@@ -91,35 +92,33 @@ app.get('/', requireAuth, async(req, res)=>{
     const sortBy = req.query.sort;
     const searchQuery = req.query.search;
 
-    let orderByClause='ORDER BY date_read DESC';
-    if (sortBy==='rating') orderByClause='ORDER BY avg_rating DESC';
-    else if (sortBy==='date_read') orderByClause='ORDER BY date_read DESC';
+    let orderByClause = 'ORDER BY MAX(date_read) DESC';
+    if (sortBy === 'rating') orderByClause = 'ORDER BY avg_rating DESC';
+    else if (sortBy === 'date_read') orderByClause = 'ORDER BY MAX(date_read) DESC';
 
-    let whereClause='';
-    if(searchQuery){
-        whereClause=`WHERE title ILIKE '%${searchQuery}%' OR author ILIKE '%${searchQuery}%'`;
+    let whereClause = '';
+    if (searchQuery) {
+        whereClause = `WHERE title ILIKE '%${searchQuery}%' OR author ILIKE '%${searchQuery}%'`;
     }
 
-    try{
-        const booksResult=await pool.query(`
+    try {
+        const booksResult = await pool.query(`
             SELECT 
-                id, 
                 title, 
                 author, 
                 isbn, 
-                date_read, 
+                MAX(date_read) as last_reviewed, 
                 COALESCE(AVG(rating)::FLOAT, 0) as avg_rating
             FROM books
             ${whereClause}
-            GROUP BY id, title, author, isbn, date_read
+            GROUP BY title, author, isbn
             ${orderByClause}
         `);
         const books = booksResult.rows;
 
-        console.log(books);
         const user = req.session.user;
-        res.render('index', {books, user, searchQuery:searchQuery || ''});
-    }catch(err){
+        res.render('index', { books, user, searchQuery: searchQuery || '' });
+    } catch (err) {
         console.log(err);
         res.status(500).send('Error fetching books');
     }
@@ -131,88 +130,130 @@ app.get('/add', requireAuth, async(req, res)=>{
     res.render('add_book', { user, book: {}, searchQuery: '' });
 });
 
-app.post('/add', requireAuth, async(req, res)=>{
-    const { title, author, rating, notes, date_read, isbn }=req.body;
-    const userId=req.session.userId;
+app.post('/add', requireAuth, async (req, res) => {
+    const { title, author, rating, notes, date_read, isbn, category } = req.body;
+    const userId = req.session.userId;
 
     try {
-        const category = await getCategoryFromISBN(isbn);
         await pool.query(
-            'INSERT INTO books(title, author, rating, notes, date_read, isbn, user_id, category) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+            'INSERT INTO books (title, author, rating, notes, date_read, isbn, user_id, category) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
             [title, author, rating, notes, date_read, isbn, userId, category]
         );
         res.redirect('/');
-    }catch(err){
+    } catch (err) {
         console.log(err);
         res.status(500).send('Error adding book');
     }
 });
 
-// Add book Form
-app.get('/edit/:id', requireAuth, async(req, res)=>{
-    const {id}=req.params;
-    try{
-        const result=await pool.query('SELECT * FROM books WHERE id=$1', [id]);
-        const book=result.rows[0];
-        const user=req.session.user;
-        res.render('edit_book', {book, user, searchQuery: ''});
-    }catch (err){
-        console.log(err);
-        res.status(500).send('Error fetching book data');
+// Edit book Form
+// Route to fetch book data for editing
+app.get('/edit/:id', requireAuth, async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const bookResult = await pool.query('SELECT * FROM books WHERE id = $1', [id]);
+        const book = bookResult.rows[0];
+        if (!book) {
+            return res.status(404).send('Book not found');
+        }
+        if (book.user_id !== req.session.userId) {
+            return res.status(403).send('You are not authorized to edit this book.');
+        }
+
+        res.render('edit_book', { book, user: req.session.user, searchQuery: '' });
+    } catch (err) {
+        console.error('Error fetching book for editing:', err);
+        res.status(500).send('Error fetching book for editing');
     }
 });
 
-app.post('/edit/:id', requireAuth, async (req, res)=>{
-    const {id}=req.params;
-    const {title, author, rating, notes, date_read, isbn}=req.body;
-    try{
-        const category = await getCategoryFromISBN(isbn);
+app.post('/edit/:id', requireAuth, async (req, res) => {
+    const { id } = req.params;
+    const { title, author, rating, notes, date_read, isbn, category } = req.body;
+
+    try {
+        const bookResult = await pool.query('SELECT * FROM books WHERE id = $1', [id]);
+        const book = bookResult.rows[0];
+
+        if (!book) {
+            return res.status(404).send('Book not found');
+        }
+        if (book.user_id !== req.session.userId) {
+            return res.status(403).send('You are not authorized to edit this book.');
+        }
         await pool.query(
-            'UPDATE books SET title=$1, author=$2, rating=$3, notes=$4, date_read=$5, isbn=$6, category=$7 WHERE id=$8',
+            'UPDATE books SET title = $1, author = $2, rating = $3, notes = $4, date_read = $5, isbn = $6, category = $7 WHERE id = $8',
             [title, author, rating, notes, date_read, isbn, category, id]
         );
+
         res.redirect('/');
+    } catch (err) {
+        console.error('Error updating book:', err);
+        res.status(500).send('Error updating book');
+    }
+});
+
+// Delete Book Route
+app.post('/delete/:id', requireAuth, async (req, res) => {
+    const {id} = req.params;
+    const userId = req.session.userId;
+
+    try{
+        const bookResult = await pool.query('SELECT * FROM books WHERE id = $1', [id]);
+        const book = bookResult.rows[0];
+
+        if(!book){
+            return res.status(404).send('Book not found');
+        }
+
+        if(book.user_id !== userId){
+            return res.status(403).send('You are not authorized to delete this book.');
+        }
+
+        await pool.query('DELETE FROM books WHERE id = $1', [id]);
+        res.redirect('/profile');
     }catch(err){
-        console.log(err);
-        res.status(500).send('Error editing book');
+        console.error(err);
+        res.status(500).send('Error deleting book');
     }
 });
 
 // Top Reviews
-app.get('/top_reviews', requireAuth, async(req, res)=>{
-    const sortBy=req.query.sort;
-    const searchQuery=req.query.search;
+app.get('/top_reviews', requireAuth, async (req, res) => {
+    const sortBy = req.query.sort;
+    const searchQuery = req.query.search;
 
-    let orderByClause='ORDER BY books.date_read DESC';
-    if (sortBy==='rating') orderByClause='ORDER BY books.rating DESC';
-    else if(sortBy==='date_read') orderByClause='ORDER BY books.date_read DESC';
+    let orderByClause = 'ORDER BY books.date_read DESC';
+    if (sortBy === 'rating') orderByClause = 'ORDER BY books.rating DESC';
+    else if (sortBy === 'date_read') orderByClause = 'ORDER BY books.date_read DESC';
 
-    let whereClause='WHERE books.rating = 5';
-    if(searchQuery){
-        whereClause+=` AND (books.title ILIKE '%${searchQuery}%' OR books.author ILIKE '%${searchQuery}%')`;
+    let whereClause = "WHERE books.rating = 5";
+    if (searchQuery) {
+        whereClause += ` AND (books.title ILIKE '%${searchQuery}%' OR books.author ILIKE '%${searchQuery}%')`;
     }
 
-    try{
-        const booksResult=await pool.query(`
+    try {
+        const booksResult = await pool.query(`
             SELECT 
-                books.id, 
-                books.title, 
-                books.author, 
-                books.isbn, 
-                books.date_read, 
-                books.rating, 
-                books.notes, 
-                users.username 
-            FROM books 
+                books.id,
+                books.title,
+                books.author,
+                books.isbn,
+                books.date_read,
+                books.rating as avg_rating,
+                users.username
+            FROM books
             JOIN users ON books.user_id = users.id
             ${whereClause}
+            GROUP BY books.id, users.username
             ${orderByClause}
         `);
-        const books=booksResult.rows;
-
-        const user=req.session.user;
-        res.render('top_reviews', {books, user, searchQuery: searchQuery || ''});
-    }catch(err){
+        
+        const books = booksResult.rows;
+        const user = req.session.user;
+        res.render('top_reviews', { books, user, searchQuery: searchQuery || '' });
+    } catch (err) {
         console.log(err);
         res.status(500).send('Error fetching top reviews');
     }
@@ -367,12 +408,19 @@ app.post('/profile/edit', requireAuth, async(req, res)=>{
     }
 });
 
-app.get('/books/:id', requireAuth, async(req, res)=>{
-    const {id}=req.params;
-    try{
-        const bookResult=await pool.query('SELECT * FROM books WHERE id=$1', [id]);
-        const book=bookResult.rows[0];
-        const reviewsResult=await pool.query(`
+app.get('/books/:isbn', requireAuth, async (req, res) => {
+    const { isbn } = req.params;
+    const sortBy = req.query.sort;
+
+    try {
+        const bookResult = await pool.query('SELECT * FROM books WHERE isbn = $1 LIMIT 1', [isbn]);
+        const book = bookResult.rows[0];
+
+        if (!book) {
+            return res.status(404).send('Book not found');
+        }
+
+        const reviewsResult = await pool.query(`
             SELECT 
                 books.*, 
                 users.username, 
@@ -380,12 +428,20 @@ app.get('/books/:id', requireAuth, async(req, res)=>{
                 users.bio
             FROM books 
             JOIN users ON books.user_id = users.id
-            WHERE books.id=$1  -- Or use ISBN/title if grouping by book
-        `, [id]);
-        const reviews=reviewsResult.rows;
-        res.render('book_reviews', {book, reviews, user: req.session.user});
-    }catch(err){
-        console.log(err);
+            WHERE books.isbn = $1
+            ORDER BY ${sortBy === 'rating' ? 'books.rating DESC' : 'books.date_read DESC'}
+        `, [isbn]);
+
+        const reviews = reviewsResult.rows;
+
+        res.render('book_reviews', {
+            book,
+            reviews,
+            user: req.session.user,
+            currentSort: sortBy || 'date_read'
+        });
+    } catch (err) {
+        console.error('Error fetching book reviews:', err);
         res.status(500).send('Error fetching book reviews');
     }
 });
@@ -412,72 +468,61 @@ app.get('/reviews/:id', requireAuth, async(req, res)=>{
     }
 });
 
-async function renderCategory(req, res, categoryName, description){
-    try{
-        const booksResult=await pool.query(`
+// Existing Categories
+app.get('/category/:categoryName', requireAuth, async (req, res) => {
+    const { categoryName } = req.params;
+
+    try {
+        const booksResult = await pool.query(`
             SELECT books.*, users.username 
             FROM books 
             JOIN users ON books.user_id = users.id
             WHERE books.category = $1
             ORDER BY books.date_read DESC
         `, [categoryName]);
-        
-        res.render('category',{ 
-            books: booksResult.rows,
+
+        const books = booksResult.rows;
+
+        // Define category descriptions
+        const categoryDescriptions = {
+            'Fiction': 'Imaginary stories and narratives.',
+            'Non-Fiction': 'Fact-based books about real events, people, or ideas.',
+            'Mystery-Thriller': 'Suspenseful stories involving crime, puzzles, or danger.',
+            'Science Fiction': 'Futuristic or speculative stories about technology, space, or alternate realities.',
+            'Fantasy': 'Stories with magic, mythical creatures, and imaginary worlds.',
+            'Romance': 'Books centered around love and relationships.',
+            'Horror': 'Stories designed to scare or unsettle readers.',
+            'Historical': 'Books set in or about the past, whether fiction or non-fiction.',
+            'Young Adult (YA)': 'Books targeted at teenagers, often with coming-of-age themes.',
+            'Biography': 'Stories about real people’s lives.',
+            'Self-Help': 'Books offering advice and strategies for personal growth.',
+            'Poetry': 'Collections of poems expressing emotions and ideas.',
+            'Children’s Books': 'Books written for young readers.',
+            'Graphic Novels': 'Illustrated stories, including comics and manga.'
+        };
+
+        const description = categoryDescriptions[categoryName] || 'No description available.';
+
+        res.render('category', {
+            books,
             category: categoryName,
-            description: description,
+            description,
             user: req.session.user,
             searchQuery: req.query.search || ''
         });
-    }catch(err){
-        console.log(err);
-        res.status(500).send(`Error fetching ${categoryName} books`);
+    } catch (err) {
+        console.error('Error fetching category books:', err);
+        res.status(500).send('Error fetching category books');
     }
-}
+});
 
-// Existing Categories
-app.get('/category/fiction', requireAuth, (req, res)=>renderCategory(req, res, 
-    'Fiction', 'Imaginary stories and narratives.'));
+app.get('/privacy', (req, res) => {
+    res.render('still_working_on_it', { user: req.session.user, searchQuery: '' });
+});
 
-app.get('/category/non-fiction', requireAuth, (req, res)=>renderCategory(req, res, 
-    'Non-Fiction', 'Fact-based books about real events, people, or ideas.'));
-
-// New Categories
-app.get('/category/mystery-thriller', requireAuth, (req, res)=>renderCategory(req, res, 
-    'Mystery/Thriller', 'Suspenseful stories involving crime, puzzles, or danger.'));
-
-app.get('/category/science-fiction', requireAuth, (req, res)=>renderCategory(req, res, 
-    'Science Fiction', 'Futuristic or speculative stories about technology, space, or alternate realities.'));
-
-app.get('/category/fantasy', requireAuth, (req, res)=>renderCategory(req, res, 
-    'Fantasy', 'Stories with magic, mythical creatures, and imaginary worlds.'));
-
-app.get('/category/romance', requireAuth, (req, res)=>renderCategory(req, res, 
-    'Romance', 'Books centered around love and relationships.'));
-
-app.get('/category/horror', requireAuth, (req, res)=>renderCategory(req, res, 
-    'Horror', 'Stories designed to scare or unsettle readers.'));
-
-app.get('/category/historical', requireAuth, (req, res)=>renderCategory(req, res, 
-    'Historical', 'Books set in or about the past, whether fiction or non-fiction.'));
-
-app.get('/category/young-adult', requireAuth, (req, res)=>renderCategory(req, res, 
-    'Young Adult (YA)', 'Books targeted at teenagers, often with coming-of-age themes.'));
-
-app.get('/category/biography', requireAuth, (req, res)=>renderCategory(req, res, 
-    'Biography', 'Stories about real people’s lives.'));
-
-app.get('/category/self-help', requireAuth, (req, res)=>renderCategory(req, res, 
-    'Self-Help', 'Books offering advice and strategies for personal growth.'));
-
-app.get('/category/poetry', requireAuth, (req, res)=>renderCategory(req, res, 
-    'Poetry', 'Collections of poems expressing emotions and ideas.'));
-
-app.get('/category/childrens-books', requireAuth, (req, res)=>renderCategory(req, res, 
-    'Children’s Books', 'Books written for young readers.'));
-
-app.get('/category/graphic-novels', requireAuth, (req, res)=>renderCategory(req, res, 
-    'Graphic Novels', 'Illustrated stories, including comics and manga.'));
+app.get('/terms', (req, res) => {
+    res.render('still_working_on_it', { user: req.session.user, searchQuery: '' });
+});
 
 // Start server
 const PORT = process.env.PORT || 3001;
