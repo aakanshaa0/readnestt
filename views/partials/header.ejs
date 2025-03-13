@@ -8,10 +8,13 @@
 </head>
 <body>
     <header class="header">
+        <div class="hamburger" onclick="toggleMenu()">
+            <i class="fa-solid fa-bars"></i>
+        </div>
         <div class="logo">
             <a href="/" class="logo-text">ReadNest</a>
         </div>
-        <nav class="nav-menu">
+        <nav class="nav-menu" id="navMenu">
             <a href="/">Home</a>
             <a href="#" onclick="toggleCategoriesDropdown(); return false;">Categories <i class="fa-solid fa-caret-down"></i></a>
             <div class="dropdown-content">
@@ -70,7 +73,7 @@
             <%}else{%>
                 <a href="/login">Login</a> / <a href="/register">Register</a>
             <%}%>
-        </div>
+        </div>    
     </header>
     <script>
         function toggleCategoriesDropdown(){
@@ -94,6 +97,17 @@
             const profileLink = document.querySelector('.user-dropdown');
             if(!profileLink.contains(event.target)){
                 dropdown.classList.remove('show');
+            }
+        });
+        function toggleMenu() {
+            const navMenu = document.getElementById('navMenu');
+            navMenu.classList.toggle('active');
+        }
+        document.addEventListener('click', function(event) {
+            const navMenu = document.getElementById('navMenu');
+            const hamburger = document.querySelector('.hamburger');
+            if (!hamburger.contains(event.target) && !navMenu.contains(event.target)) {
+                navMenu.classList.remove('active');
             }
         });
     </script>
