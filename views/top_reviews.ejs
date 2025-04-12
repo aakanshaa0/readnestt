@@ -9,7 +9,7 @@
 </head>
 <body>
     <%-include('partials/header')%>
-        <h1>Top Reviews (5-Star Books)</h1>
+        <h1>Top reviews-list</h1>
         <div class="sort-options">
             <a href="/top_reviews?sort=rating">Sort by Rating</a>
         </div>
@@ -26,20 +26,20 @@
                         <h2><%= book.title %></h2>
                         <p><strong>Author:</strong> <%= book.author || "Unknown" %></p>
                         <p><strong>Average Rating:</strong> 
-                            <%if(typeof book.avg_rating === 'number'){%>
-                                <% for(let i=1;i<=5;i++){%>
-                                    <%if(i<=book.avg_rating){%>
+                            <span class="star-rating">
+                                <% for(let i=1; i<=5; i++) { %>
+                                    <% if(i <= book.avg_rating) { %>
                                         <i class="fas fa-star"></i>
-                                    <%}else{%>
+                                    <% } else if(i - 0.5 <= book.avg_rating && book.avg_rating < i) { %>
+                                        <i class="fas fa-star-half-alt"></i>
+                                    <% } else { %>
                                         <i class="far fa-star"></i>
-                                    <%}%>
-                                <%}%>
-                                (<%= book.avg_rating.toFixed(2) %>/5)
-                            <%}else{%>
-                                N/A
-                            <%} %>
+                                    <% } %>
+                                <% } %>
+                                (<%= book.avg_rating.toFixed(1) %>/5)
+                            </span>
                         </p>
-                        <a href="/books/<%= book.id %>" class="btnn">View Reviews</a>
+                        <a href="/books/<%= book.isbn %>" class="btnn">View Reviews</a>
                     </div>
                 <%})%>
             <%}%>

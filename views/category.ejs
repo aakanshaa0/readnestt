@@ -12,6 +12,12 @@
     <div class="container">
         <h1><%= category %> Books</h1>
         <p class="category-description"><%= description %></p>
+        
+        <div class="sort-options">
+            <a href="/category/<%= category %>?sort=rating">Sort by Rating</a>
+            <a href="/category/<%= category %>?sort=date">Sort by Date</a>
+        </div>
+
         <div class="book-list">
             <% if (books.length === 0) { %>
                 <p class="empty-state">No books found in this category. <a href="/add" class="btnn">Add one</a></p>
@@ -24,16 +30,23 @@
                              class="book-cover">
                         <h2><%= book.title %></h2>
                         <p><strong>Author:</strong> <%= book.author || "Unknown" %></p>
-                        <p><strong>Rating:</strong> 
-                            <% for (let i = 1; i <= 5; i++) { %>
-                                <% if (i <= book.rating) { %>
-                                    <i class="fas fa-star"></i>
-                                <% } else { %>
-                                    <i class="far fa-star"></i>
+                        <p><strong>Average Rating:</strong> 
+                            <span class="star-rating">
+                                <% for (let i = 1; i <= 5; i++) { %>
+                                    <% if (i <= book.avg_rating) { %>
+                                        <i class="fas fa-star"></i>
+                                    <% } else if (i - 0.5 <= book.avg_rating && book.avg_rating < i) { %>
+                                        <i class="fas fa-star-half-alt"></i>
+                                    <% } else { %>
+                                        <i class="far fa-star"></i>
+                                    <% } %>
                                 <% } %>
-                            <% } %>
-                            (<%= book.rating %>/5)
+                                (<%= book.avg_rating.toFixed(1) %>/5)
+                            </span>
                         </p>
+                        <p><strong>Reviews:</strong> <%= book.review_count %></p>
+                        <p><strong>Reviewed by:</strong> <%= book.username %></p>
+                        <p><strong>Date:</strong> <%= book.date_read %></p>
                         <a href="/books/<%= book.isbn %>" class="btnn">View Reviews</a>
                     </div>
                 <% }) %>

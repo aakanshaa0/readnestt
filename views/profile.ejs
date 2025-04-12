@@ -59,10 +59,10 @@
                             </p>
                             <% if (isCurrentUser) { %>
                                 <div class="book-actions">
-                                    <a href="/edit/<%= book.id %>" class="action-icon">
+                                    <a href="/edit/<%= book._id %>" class="action-icon">
                                         <i class="fas fa-edit"></i>
                                     </a>
-                                    <form action="/delete/<%=book.id%>" method="POST" class="action-icon">
+                                    <form action="/delete/<%= book._id %>" method="POST" class="action-icon">
                                         <button type="submit" class="icon-button">
                                             <i class="fas fa-trash"></i>
                                         </button>

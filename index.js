@@ -145,54 +145,60 @@ app.get('/logout', (req, res) => {
     });
 });
 
-// Homepage - where the magic happens
+// Homepage
 app.get('/', requireAuth, async (req, res) => {
-    const sortOption = req.query.sort;
-    const searchTerm = req.query.search;
+    const searchQuery = req.query.search || '';
+    const sortBy = req.query.sort;
 
     try {
         const myDb = dbClient.db('booknotes');
-        let searchFilter = {};
         
-        // Search - could use full-text search later
-        if (searchTerm) {
-            searchFilter = {
-                $or: [
-                    { title: { $regex: searchTerm, $options: 'i' } },
-                    { author: { $regex: searchTerm, $options: 'i' } }
-                ]
-            };
-        }
+        // Build the query
+        const query = searchQuery ? {
+            $or: [
+                { title: { $regex: searchQuery, $options: 'i' } },
+                { author: { $regex: searchQuery, $options: 'i' } }
+            ]
+        } : {};
 
-        // Sorting - default to most recent
-        let sortBy = { date_read: -1 };
-        if (sortOption === 'rating') {
-            sortBy = { rating: -1 };
-        }
-
-        // Get books with stats
-        const myBooks = await myDb.collection('books')
+        // Get books with average ratings and review counts
+        const books = await myDb.collection('books')
             .aggregate([
-                { $match: searchFilter },
+                { $match: query },
                 {
                     $group: {
                         _id: {
+                            isbn: "$isbn",
                             title: "$title",
-                            author: "$author",
-                            isbn: "$isbn"
+                            author: "$author"
                         },
-                        last_reviewed: { $max: "$date_read" },
-                        avg_rating: { $avg: "$rating" }
+                        avg_rating: { $avg: "$rating" },
+                        review_count: { $sum: 1 },
+                        last_reviewed: { $max: "$date_read" }
                     }
                 },
-                { $sort: sortBy }
+                {
+                    $project: {
+                        _id: 0,
+                        isbn: "$_id.isbn",
+                        title: "$_id.title",
+                        author: "$_id.author",
+                        avg_rating: { $round: ["$avg_rating", 1] },
+                        review_count: 1,
+                        last_reviewed: 1
+                    }
+                },
+                { $sort: sortBy === 'rating' ? { avg_rating: -1 } : { last_reviewed: -1 } }
             ])
             .toArray();
 
-        const currentUser = req.session.user;
-        res.render('index', { books: myBooks, user: currentUser, searchQuery: searchTerm || '' });
-    } catch (error) {
-        console.error('Error fetching books:', error);
+        res.render('index', {
+            books,
+            user: req.session.user,
+            searchQuery
+        });
+    } catch (err) {
+        console.error('Error fetching books:', err);
         res.status(500).send('Error fetching books');
     }
 });
@@ -250,7 +256,25 @@ app.get('/edit/:id', requireAuth, async (req, res) => {
             return res.status(403).send('Not your book to edit');
         }
 
-        res.render('edit_book', { book: bookToEdit, user: req.session.user, searchQuery: '' });
+        // Format the date for the form
+        let formattedDate = '';
+        if (bookToEdit.date_read) {
+            const date = new Date(bookToEdit.date_read);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            formattedDate = `${year}-${month}-${day}`;
+        }
+
+        res.render('edit_book', { 
+            book: {
+                ...bookToEdit,
+                id: bookToEdit._id.toString(),
+                date_read: formattedDate
+            }, 
+            user: req.session.user, 
+            searchQuery: '' 
+        });
     } catch (error) {
         console.error('Error fetching book:', error);
         res.status(500).send('Error fetching book');
@@ -329,58 +353,60 @@ app.get('/top_reviews', requireAuth, async (req, res) => {
 
     try {
         const myDb = dbClient.db('booknotes');
-        let searchFilter = { rating: 5 };
         
+        // Build the query for 5-star books
+        const query = { rating: 5 };
+        
+        // Add search filter if search term is provided
         if (searchTerm) {
-            searchFilter = {
-                $and: [
-                    { rating: 5 },
-                    {
-                        $or: [
-                            { title: { $regex: searchTerm, $options: 'i' } },
-                            { author: { $regex: searchTerm, $options: 'i' } }
-                        ]
-                    }
-                ]
-            };
+            query.$or = [
+                { title: { $regex: searchTerm, $options: 'i' } },
+                { author: { $regex: searchTerm, $options: 'i' } }
+            ];
         }
 
-        let sortBy = { date_read: -1 };
-        if (sortOption === 'rating') {
-            sortBy = { rating: -1 };
-        }
-
-        const topBooks = await myDb.collection('books')
-            .aggregate([
-                { $match: searchFilter },
-                {
-                    $lookup: {
-                        from: "users",
-                        localField: "user_id",
-                        foreignField: "_id",
-                        as: "user"
-                    }
-                },
-                { $unwind: "$user" },
-                {
-                    $project: {
-                        _id: 1,
-                        title: 1,
-                        author: 1,
-                        isbn: 1,
-                        date_read: 1,
-                        avg_rating: "$rating",
-                        username: "$user.username"
-                    }
-                },
-                { $sort: sortBy }
-            ])
+        // Get all 5-star books with user information
+        const books = await myDb.collection('books')
+            .find(query)
+            .sort(sortOption === 'rating' ? { rating: -1 } : { date_read: -1 })
             .toArray();
 
-        res.render('top_reviews', { books: topBooks, user: req.session.user, searchQuery: searchTerm || '' });
+        // Get user information and calculate average ratings for each book
+        const booksWithUsers = await Promise.all(books.map(async (book) => {
+            const user = await myDb.collection('users').findOne({ _id: new ObjectId(book.user_id) });
+            
+            // Calculate average rating for this book
+            const bookReviews = await myDb.collection('books')
+                .find({ isbn: book.isbn })
+                .toArray();
+            
+            const avgRating = bookReviews.reduce((sum, review) => sum + review.rating, 0) / bookReviews.length;
+
+            return {
+                ...book,
+                id: book._id.toString(),
+                username: user ? user.username : 'Unknown',
+                profile_picture: user ? (user.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}`) : null,
+                date_read: book.date_read ? new Date(book.date_read).toLocaleDateString() : 'Not specified',
+                avg_rating: avgRating,
+                review_count: bookReviews.length
+            };
+        }));
+
+        // Sort books by average rating if requested
+        if (sortOption === 'rating') {
+            booksWithUsers.sort((a, b) => b.avg_rating - a.avg_rating);
+        }
+
+        res.render('top_reviews', {
+            books: booksWithUsers,
+            user: req.session.user,
+            searchQuery: searchTerm || '',
+            currentSort: sortOption || 'date_read'
+        });
     } catch (error) {
         console.error('Error fetching top reviews:', error);
-        res.status(500).send('Error fetching top reviews');
+        res.status(500).send('Error fetching top reviews. Please try again later.');
     }
 });
 
@@ -547,7 +573,7 @@ app.post('/profile/edit', requireAuth, async(req, res)=>{
     }
 });
 
-// Book Reviews
+// Book Reviews - shows all reviews for a book
 app.get('/books/:isbn', requireAuth, async (req, res) => {
     const { isbn } = req.params;
     const sortBy = req.query.sort;
@@ -555,149 +581,140 @@ app.get('/books/:isbn', requireAuth, async (req, res) => {
     try {
         const myDb = dbClient.db('booknotes');
         
-        // Get the book details
-        const book = await myDb.collection('books').findOne({ isbn });
+        // First, get the book details
+        const bookDetails = await myDb.collection('books').findOne({ isbn: isbn });
         
-        if (!book) {
+        if (!bookDetails) {
             return res.status(404).send('Book not found');
         }
 
         // Get all reviews for this book with user information
         const reviews = await myDb.collection('books')
-            .aggregate([
-                { $match: { isbn } },
-                {
-                    $lookup: {
-                        from: "users",
-                        localField: "user_id",
-                        foreignField: "_id",
-                        as: "user"
-                    }
-                },
-                { $unwind: "$user" },
-                {
-                    $project: {
-                        _id: 1,
-                        title: 1,
-                        author: 1,
-                        rating: 1,
-                        notes: 1,
-                        date_read: 1,
-                        isbn: 1,
-                        username: "$user.username",
-                        profile_picture: "$user.profile_picture",
-                        bio: "$user.bio"
-                    }
-                },
-                { $sort: sortBy === 'rating' ? { rating: -1 } : { date_read: -1 } }
-            ])
+            .find({ isbn: isbn })
+            .sort(sortBy === 'rating' ? { rating: -1 } : { date_read: -1 })
             .toArray();
 
+        // Get user information for each review
+        const reviewsWithUsers = await Promise.all(reviews.map(async (review) => {
+            const user = await myDb.collection('users').findOne({ _id: new ObjectId(review.user_id) });
+            return {
+                ...review,
+                id: review._id.toString(),
+                username: user ? user.username : 'Unknown',
+                profile_picture: user ? (user.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}`) : null,
+                date_read: review.date_read ? new Date(review.date_read).toLocaleDateString() : 'Not specified'
+            };
+        }));
+
+        // Calculate average rating
+        const avgRating = reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length;
+
         res.render('book_reviews', {
-            book,
-            reviews,
+            book: {
+                title: bookDetails.title,
+                author: bookDetails.author,
+                isbn: bookDetails.isbn,
+                avg_rating: avgRating.toFixed(1),
+                review_count: reviews.length
+            },
+            reviews: reviewsWithUsers,
             user: req.session.user,
             currentSort: sortBy || 'date_read'
         });
     } catch (err) {
         console.error('Error fetching book reviews:', err);
-        res.status(500).send('Error fetching book reviews');
+        console.error('ISBN being searched:', isbn);
+        res.status(500).send('Error fetching book reviews. Please try again later.');
     }
 });
 
-// Individual Review
-app.get('/reviews/:id', requireAuth, async(req, res)=>{
-    const {id} = req.params;
+// Individual Review Details
+app.get('/reviews/:id', requireAuth, async (req, res) => {
+    const { id } = req.params;
 
     try {
         const myDb = dbClient.db('booknotes');
         
+        // Get the review with user information
         const review = await myDb.collection('books')
-            .aggregate([
-                { $match: { _id: new ObjectId(id) } },
-                {
-                    $lookup: {
-                        from: "users",
-                        localField: "user_id",
-                        foreignField: "_id",
-                        as: "user"
-                    }
-                },
-                { $unwind: "$user" },
-                {
-                    $project: {
-                        _id: 1,
-                        title: 1,
-                        author: 1,
-                        rating: 1,
-                        notes: 1,
-                        date_read: 1,
-                        isbn: 1,
-                        username: "$user.username",
-                        profile_picture: "$user.profile_picture",
-                        bio: "$user.bio"
-                    }
-                }
-            ])
-            .next();
+            .findOne({ _id: new ObjectId(id) });
 
         if (!review) {
-            return res.status(404).send('Review not found');
+            return res.status(404).send('Review not found.');
         }
 
+        // Get user information
+        const user = await myDb.collection('users')
+            .findOne({ _id: new ObjectId(review.user_id) });
+
+        // Format the review data
+        const formattedReview = {
+            ...review,
+            id: review._id.toString(),
+            username: user ? user.username : 'Unknown',
+            profile_picture: user ? (user.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}`) : null,
+            bio: user ? user.bio : '',
+            date_read: review.date_read ? new Date(review.date_read).toLocaleDateString() : 'Not specified'
+        };
+
         res.render('review_detail', {
-            review,
+            review: formattedReview,
             user: req.session.user,
             searchQuery: ''
         });
-    } catch(err) {
+    } catch (err) {
         console.error('Error fetching review details:', err);
-        res.status(500).send('Error fetching review details');
+        res.status(500).send('Error fetching review details. Please try again later.');
     }
 });
 
-// Existing Categories
+// Category page
 app.get('/category/:categoryName', requireAuth, async (req, res) => {
     const { categoryName } = req.params;
+    const sortOption = req.query.sort;
+    const searchTerm = req.query.search;
 
     try {
         const myDb = dbClient.db('booknotes');
         
-        // Get books with user information using aggregation
+        // Build the query for the category
+        const query = { category: categoryName };
+        
+        // Add search filter if search term is provided
+        if (searchTerm) {
+            query.$or = [
+                { title: { $regex: searchTerm, $options: 'i' } },
+                { author: { $regex: searchTerm, $options: 'i' } }
+            ];
+        }
+
+        // Get all books in this category with user information
         const books = await myDb.collection('books')
-            .aggregate([
-                {
-                    $match: { category: categoryName }
-                },
-                {
-                    $lookup: {
-                        from: "users",
-                        localField: "user_id",
-                        foreignField: "_id",
-                        as: "user"
-                    }
-                },
-                {
-                    $unwind: "$user"
-                },
-                {
-                    $project: {
-                        _id: 1,
-                        title: 1,
-                        author: 1,
-                        rating: 1,
-                        notes: 1,
-                        date_read: 1,
-                        isbn: 1,
-                        category: 1,
-                        username: "$user.username"
-                    }
-                },
-                {
-                    $sort: { date_read: -1 }
-                }
-            ])
+            .find(query)
+            .sort(sortOption === 'rating' ? { rating: -1 } : { date_read: -1 })
             .toArray();
+
+        // Get user information for each book
+        const booksWithUsers = await Promise.all(books.map(async (book) => {
+            const user = await myDb.collection('users').findOne({ _id: new ObjectId(book.user_id) });
+            
+            // Calculate average rating for this book
+            const bookReviews = await myDb.collection('books')
+                .find({ isbn: book.isbn })
+                .toArray();
+            
+            const avgRating = bookReviews.reduce((sum, review) => sum + review.rating, 0) / bookReviews.length;
+
+            return {
+                ...book,
+                id: book._id.toString(),
+                username: user ? user.username : 'Unknown',
+                profile_picture: user ? (user.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}`) : null,
+                date_read: book.date_read ? new Date(book.date_read).toLocaleDateString() : 'Not specified',
+                avg_rating: avgRating,
+                review_count: bookReviews.length
+            };
+        }));
 
         // Define category descriptions
         const categoryDescriptions = {
@@ -720,11 +737,12 @@ app.get('/category/:categoryName', requireAuth, async (req, res) => {
         const description = categoryDescriptions[categoryName] || 'No description available.';
 
         res.render('category', {
-            books,
+            books: booksWithUsers,
             category: categoryName,
             description,
             user: req.session.user,
-            searchQuery: req.query.search || ''
+            searchQuery: searchTerm || '',
+            currentSort: sortOption || 'date_read'
         });
     } catch (err) {
         console.error('Error fetching category books:', err);

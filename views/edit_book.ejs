@@ -46,7 +46,7 @@
                     <option value="Biography" <%= book.category === 'Biography' ? 'selected' : '' %>>Biography</option>
                     <option value="Self-Help" <%= book.category === 'Self-Help' ? 'selected' : '' %>>Self-Help</option>
                     <option value="Poetry" <%= book.category === 'Poetry' ? 'selected' : '' %>>Poetry</option>
-                    <option value="Children’s Books" <%= book.category === 'Children’s Books' ? 'selected' : '' %>>Children’s Books</option>
+                    <option value="Children's Books" <%= book.category === "Children's Books" ? 'selected' : '' %>>Children's Books</option>
                     <option value="Graphic Novels" <%= book.category === 'Graphic Novels' ? 'selected' : '' %>>Graphic Novels</option>
                 </select>
             </div>
@@ -78,7 +78,7 @@
             <div class="form-group">
                 <label for="date_read">Date Read:</label>
                 <input type="date" id="date_read" name="date_read"
-                       value="<%= book.date_read.toISOString().split('T')[0] %>">
+                       value="<%= book.date_read %>">
             </div>
 
             <div class="form-actions">
