@@ -386,21 +386,34 @@ app.get('/top_reviews', requireAuth, async (req, res) => {
 
 // Contact Me
 app.get('/contact', requireAuth, async(req, res)=>{
-    const user=req.session.user;
+    const user = req.session.user;
     res.render('contact', {user, message: null, error: null, searchQuery: ''});
 });
 
 app.post('/contact', async(req, res)=>{
-    const { fullname, email, message}=req.body;
+    const { fullname, email, message } = req.body;
     try {
-        await pool.query(
-            'INSERT INTO messages (fullname, email, message) VALUES ($1, $2, $3)',
-            [fullname, email, message]
-        );
-        res.render('contact', {message: 'Thank you for your message! I will get back to you soon.', error: null, user: req.session.user, searchQuery: ''});
-    }catch(err){
+        const myDb = dbClient.db('booknotes');
+        await myDb.collection('messages').insertOne({
+            fullname,
+            email,
+            message,
+            createdAt: new Date()
+        });
+        res.render('contact', {
+            message: 'Thank you for your message! I will get back to you soon.',
+            error: null,
+            user: req.session.user,
+            searchQuery: ''
+        });
+    } catch(err) {
         console.error('Error saving message:', err);
-        res.render('contact', {message: null, error: 'Failed to send your message. Please try again.', user: req.session.user, searchQuery: ''});
+        res.render('contact', {
+            message: null,
+            error: 'Failed to send your message. Please try again.',
+            user: req.session.user,
+            searchQuery: ''
+        });
     }
 });
 
@@ -534,31 +547,51 @@ app.post('/profile/edit', requireAuth, async(req, res)=>{
     }
 });
 
+// Book Reviews
 app.get('/books/:isbn', requireAuth, async (req, res) => {
     const { isbn } = req.params;
     const sortBy = req.query.sort;
 
     try {
-        const bookResult = await pool.query('SELECT * FROM books WHERE isbn = $1 LIMIT 1', [isbn]);
-        const book = bookResult.rows[0];
-
+        const myDb = dbClient.db('booknotes');
+        
+        // Get the book details
+        const book = await myDb.collection('books').findOne({ isbn });
+        
         if (!book) {
             return res.status(404).send('Book not found');
         }
 
-        const reviewsResult = await pool.query(`
-            SELECT 
-                books.*, 
-                users.username, 
-                users.profile_picture,
-                users.bio
-            FROM books 
-            JOIN users ON books.user_id = users.id
-            WHERE books.isbn = $1
-            ORDER BY ${sortBy === 'rating' ? 'books.rating DESC' : 'books.date_read DESC'}
-        `, [isbn]);
-
-        const reviews = reviewsResult.rows;
+        // Get all reviews for this book with user information
+        const reviews = await myDb.collection('books')
+            .aggregate([
+                { $match: { isbn } },
+                {
+                    $lookup: {
+                        from: "users",
+                        localField: "user_id",
+                        foreignField: "_id",
+                        as: "user"
+                    }
+                },
+                { $unwind: "$user" },
+                {
+                    $project: {
+                        _id: 1,
+                        title: 1,
+                        author: 1,
+                        rating: 1,
+                        notes: 1,
+                        date_read: 1,
+                        isbn: 1,
+                        username: "$user.username",
+                        profile_picture: "$user.profile_picture",
+                        bio: "$user.bio"
+                    }
+                },
+                { $sort: sortBy === 'rating' ? { rating: -1 } : { date_read: -1 } }
+            ])
+            .toArray();
 
         res.render('book_reviews', {
             book,
@@ -572,24 +605,53 @@ app.get('/books/:isbn', requireAuth, async (req, res) => {
     }
 });
 
+// Individual Review
 app.get('/reviews/:id', requireAuth, async(req, res)=>{
-    const {id}=req.params;
+    const {id} = req.params;
 
     try {
-        const reviewResult = await pool.query(`
-            SELECT 
-                books.*, 
-                users.username, 
-                users.profile_picture,
-                users.bio
-            FROM books 
-            JOIN users ON books.user_id = users.id
-            WHERE books.id = $1
-        `, [id]);
-        const review = reviewResult.rows[0];
-        res.render('review_detail', {review, user: req.session.user});
-    }catch(err){
-        console.error(err);
+        const myDb = dbClient.db('booknotes');
+        
+        const review = await myDb.collection('books')
+            .aggregate([
+                { $match: { _id: new ObjectId(id) } },
+                {
+                    $lookup: {
+                        from: "users",
+                        localField: "user_id",
+                        foreignField: "_id",
+                        as: "user"
+                    }
+                },
+                { $unwind: "$user" },
+                {
+                    $project: {
+                        _id: 1,
+                        title: 1,
+                        author: 1,
+                        rating: 1,
+                        notes: 1,
+                        date_read: 1,
+                        isbn: 1,
+                        username: "$user.username",
+                        profile_picture: "$user.profile_picture",
+                        bio: "$user.bio"
+                    }
+                }
+            ])
+            .next();
+
+        if (!review) {
+            return res.status(404).send('Review not found');
+        }
+
+        res.render('review_detail', {
+            review,
+            user: req.session.user,
+            searchQuery: ''
+        });
+    } catch(err) {
+        console.error('Error fetching review details:', err);
         res.status(500).send('Error fetching review details');
     }
 });
